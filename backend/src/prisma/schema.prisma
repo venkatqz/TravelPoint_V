@@ -30,8 +30,6 @@ model bookings {
   amount_paid    Decimal                  @db.Decimal(10, 2)
   booking_status bookings_booking_status? @default(Confirmed)
 
-  reviews        BusReview?
-
   @@index([drop_stop_id], map: "fk_bookings_drop")
   @@index([passenger_id], map: "fk_bookings_passenger")
   @@index([pickup_stop_id], map: "fk_bookings_pickup")
@@ -46,8 +44,6 @@ model bus {
   bus_type      bus_bus_type?
   rating        Decimal?      @default(0.0) @db.Decimal(3, 1)
   total_ratings Int           @default(0)
-
-  reviews BusReview[]
 
   @@index([operator_id], map: "fk_bus_operator")
 }
@@ -120,40 +116,31 @@ model users {
   password   String      @db.VarChar(100)
   token      String?     @db.Text
   apiKey     String?     @unique @map("api_key")
-
-  saved_travellers saved_travellers[]
-  reviews  BusReview[]
 }
 
-model saved_travellers{
-  traveller_id Int @id @default(autoincrement())
-  user_id Int
-  name String @db.VarChar(100)
-  age Int
-  gender Gender
-  created_at DateTime @default(now()) 
+model saved_travellers {
+  traveller_id Int      @id @default(autoincrement())
+  user_id      Int
+  name         String   @db.VarChar(100)
+  age          Int
+  gender       Gender
+  created_at   DateTime @default(now())
 
-  user  users @relation(fields: [user_id], references: [user_id])
   @@index([user_id], map: "fk_saved_travellers_user")
 }
 
 model BusReview {
   review_id   Int      @id @default(autoincrement())
-  stars       Int      // 1 to 5
+  stars       Int
   review_text String?  @db.Text
   created_at  DateTime @default(now())
-
-  // Relations
-  booking_id  Int      @unique // @unique ensures one review per ticket
-  booking     bookings @relation(fields: [booking_id], references: [booking_id])
-
+  booking_id  Int      @unique
   bus_id      Int
-  bus         bus      @relation(fields: [bus_id], references: [bus_id])
-
   user_id     Int
-  user        users    @relation(fields: [user_id], references: [user_id])
 
-  @@map("bus_reviews") // Map to the actual table name 'bus_reviews'
+  @@index([bus_id], map: "bus_reviews_bus_id_fkey")
+  @@index([user_id], map: "bus_reviews_user_id_fkey")
+  @@map("bus_reviews")
 }
 
 enum seat_seat_type {
