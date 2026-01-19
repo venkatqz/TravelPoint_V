@@ -139,10 +139,15 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
             console.log(`🤖 Trying model: ${model}`);
 
             // A. Initial Request with enhanced prompt
+            // Define validation helper if not imported
+            const isValidToolCall = (obj: any): boolean => {
+                return obj && typeof obj.tool === "string" && obj.args && typeof obj.args === "object";
+            };
+
             const response = await hf.chatCompletion({
                 model: model,
                 messages: [
-                    { role: "system", content: currentInstructions },
+                    { role: "system", content: SYSTEM_INSTRUCTION },
                     { role: "user", content: userMessage }
                 ],
                 max_tokens: 300,
@@ -159,8 +164,7 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                 console.log(`🛠️ Detected potential tool call`);
 
                 try {
-                    // CLEAN the JSON before parsing (Fixes the error you saw)
-                    const jsonStr = cleanJson(content);
+                    // CLEAN the JSON before parsing
                     const toolCall = JSON.parse(jsonStr);
 
                     // Validate the tool call structure
@@ -215,7 +219,7 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                     const finalResponse = await hf.chatCompletion({
                         model: model,
                         messages: [
-                            { role: "system", content: currentInstructions },
+                            { role: "system", content: SYSTEM_INSTRUCTION },
                             { role: "user", content: userMessage },
                             { role: "assistant", content: jsonStr },
                             { role: "user", content: `Tool Output: ${toolResult}. Please tell me what you did.` }
