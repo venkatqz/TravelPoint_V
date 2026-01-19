@@ -16,24 +16,15 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; 
     
-    console.log("🔐 Auth check - Header:", authHeader?.substring(0, 30) + "...");
-    
     if (!token) {
-        console.log("❌ No token provided");
         return res.status(401).json({ success: false, message: 'Access Denied: No Token Provided' });
     }
 
     try {
-        console.log("🔑 Verifying token with secret:", JWT_SECRET?.substring(0, 10) + "...");
         const verified = jwt.verify(token, JWT_SECRET) as { user_id: number; role: string };
-        
-        console.log("✅ Token verified for user:", verified.user_id, "role:", verified.role);
         (req as AuthRequest).user = verified;
-        
         next();
-
     } catch (error: any) {
-        console.log("❌ Token verification failed:", error.message);
         return res.status(403).json({ success: false, message: 'Invalid or Expired Token' });
     }
 };

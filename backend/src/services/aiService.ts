@@ -81,10 +81,7 @@ const extractJson = (text: string): string | null => {
         .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
         .trim();
     
-    console.log("🔍 Cleaned text:", clean.substring(0, 100));
-    
-    // Try multiple extraction strategies
-    // Strategy 1: Find complete JSON object with balanced braces
+    // Find complete JSON object with balanced braces
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
     
@@ -97,7 +94,6 @@ const extractJson = (text: string): string | null => {
             .replace(/\s+/g, " ")  // Normalize spaces
             .trim();
             
-        console.log("📦 Extracted JSON:", finalJson);
         return finalJson;
     }
     
@@ -118,8 +114,6 @@ const isValidToolCall = (obj: any): boolean => {
 };
 
 export const generateAIResponse = async (userMessage: string, userId: number = 1) => {
-    console.log("🟢 generateAIResponse called with:", userMessage);
-    
     // Use better models trained for instruction following and function calling
     const models = [
         'mistralai/Mixtral-8x7B-Instruct-v0.1',    // Excellent at JSON format
@@ -131,8 +125,6 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
 
     for (const model of models) {
         try {
-            console.log(`🤖 Trying model: ${model}`);
-            
             // A. Initial Request with enhanced prompt
             const response = await hf.chatCompletion({
                 model: model,
@@ -145,25 +137,20 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
             });
 
             const content = response.choices[0]?.message?.content || "";
-            console.log(`📝 Model response: ${content}`);
 
             // B. Check for Tool Call with improved detection
             const jsonStr = extractJson(content);
             
             if (jsonStr) {
-                console.log(`🛠️ Detected potential tool call`);
-                
                 try {
                     const toolCall = JSON.parse(jsonStr);
                     
                     // Validate the tool call structure
                     if (!isValidToolCall(toolCall)) {
-                        console.warn("⚠️ Invalid tool call structure, treating as normal response");
                         return content;
                     }
                     
                     let toolResult = "";
-                    console.log(`✅ Valid tool call: ${toolCall.tool}`);
 
                     // C. Execute the appropriate tool
                     switch (toolCall.tool) {
@@ -198,11 +185,8 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                             break;
                         
                         default:
-                            console.warn(`⚠️ Unknown tool: ${toolCall.tool}`);
                             return "I couldn't understand which action to perform. Could you rephrase?";
                     }
-
-                    console.log(`📊 Tool result: ${toolResult.substring(0, 100)}...`);
 
                     // D. Feed result back to AI for natural response
                     const finalResponse = await hf.chatCompletion({
@@ -220,7 +204,7 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                     return finalResponse.choices[0]?.message?.content || toolResult;
 
                 } catch (parseError) {
-                    console.error("❌ JSON Parse Error:", parseError);
+                    // JSON parsing failed, treat as normal response
                     // If JSON parsing fails, treat as normal response
                     return content;
                 }
@@ -230,13 +214,12 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
             return content;
 
         } catch (error: any) {
-            console.warn(`⚠️ Model ${model} failed:`, error.message);
+            // Model failed, try next one
             lastError = error;
             continue; // Try next model
         }
     }
 
     // All models failed
-    console.error("❌ All models failed:", lastError);
     return "I'm having trouble processing your request right now. Please try again in a moment.";
 };

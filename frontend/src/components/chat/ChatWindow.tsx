@@ -143,8 +143,6 @@ export const ChatWindow = ({
                     return;
                 }
 
-                console.log("🔵 Sending AI request with token:", token.substring(0, 20) + "...");
-
                 const response = await fetch('http://localhost:3000/api/ai/chat', {
                     method: 'POST',
                     headers: { 
