@@ -4,7 +4,6 @@ import { generateAndSaveApiKey } from '../services/mcpTokenService';
 import { AuthRequest } from '../middlewares/authMiddleware';
 
 export const chatWithAI = async (req: Request, res: Response) => {
-    console.log("🔵 AI Chat endpoint called with message:", req.body.message);
     try {
         const { message } = req.body;
         const authReq = req as AuthRequest;

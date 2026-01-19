@@ -91,43 +91,54 @@ If the user is just chatting (hello, thanks, etc), reply normally without JSON.
 /**
  * Helper to strip markdown and find the JSON object
  */
-const cleanJson = (text: string): string => {
-    // Remove markdown code blocks if present
-    let clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    // Find the first '{' and last '}'
+const extractJson = (text: string): string | null => {
+    // Remove markdown code blocks and extra whitespace
+    let clean = text
+        .replace(/```json\s*/g, "")
+        .replace(/```\s*/g, "")
+        .replace(/\r\n/g, "\n")  // Normalize line endings
+        .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+        .trim();
+
+    console.log("🔍 Cleaned text:", clean.substring(0, 100));
+
+    // Try multiple extraction strategies
+    // Strategy 1: Find complete JSON object with balanced braces
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
-    if (start !== -1 && end !== -1) {
-        return clean.substring(start, end + 1);
+
+    if (start !== -1 && end !== -1 && end > start) {
+        const jsonStr = clean.substring(start, end + 1);
+
+        // Clean up any potential issues
+        const finalJson = jsonStr
+            .replace(/\n/g, " ")  // Remove newlines
+            .replace(/\s+/g, " ")  // Normalize spaces
+            .trim();
+
+        console.log("📦 Extracted JSON:", finalJson);
+        return finalJson;
     }
     return clean;
 };
 
 export const generateAIResponse = async (userMessage: string, userId: number = 1) => {
-    // 1. Ensure MCP Connection
-    await connectToMcpServer();
+    console.log("🟢 generateAIResponse called with:", userMessage);
 
-    // 2. Prepare dynamic instruction
-    let currentInstructions = SYSTEM_INSTRUCTION;
+    // Use better models trained for instruction following and function calling
+    const models = [
+        'mistralai/Mixtral-8x7B-Instruct-v0.1',    // Excellent at JSON format
+        'NousResearch/Hermes-2-Pro-Mistral-7B',    // Trained for function calling
+        'meta-llama/Meta-Llama-3-8B-Instruct'      // Fallback
+    ];
 
-    if (mcpToolsOrchestration.length > 0) {
-        currentInstructions += "\n<external_mcp_tools>\n";
-        mcpToolsOrchestration.forEach((t: any) => {
-            currentInstructions += `  <tool name="${t.name}">\n`;
-            currentInstructions += `    <description>${t.description}</description>\n`;
-            // Simplify params for demo
-            currentInstructions += `    <parameters>${Object.keys(t.inputSchema?.properties || {}).join(", ")}</parameters>\n`;
-            currentInstructions += `  </tool>\n`;
-        });
-        currentInstructions += "</external_mcp_tools>\n";
-    }
-
-    // 3. Try Meta Llama 3 first (Smarter), then Phi-3 (Backup)
-    const models = ['meta-llama/Meta-Llama-3-8B-Instruct', 'microsoft/Phi-3-mini-4k-instruct'];
+    let lastError = null;
 
     for (const model of models) {
         try {
-            // A. Initial Request
+            console.log(`🤖 Trying model: ${model}`);
+
+            // A. Initial Request with enhanced prompt
             const response = await hf.chatCompletion({
                 model: model,
                 messages: [
@@ -139,53 +150,68 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
             });
 
             const content = response.choices[0]?.message?.content || "";
+            console.log(`📝 Model response: ${content}`);
 
-            // B. Check for Tool Call (Robust Regex)
-            if (content.match(/\{\s*"tool"\s*:/)) {
-                console.log(`🛠️ AI (${model}) wants to use a tool...`);
+            // B. Check for Tool Call with improved detection
+            const jsonStr = extractJson(content);
+
+            if (jsonStr) {
+                console.log(`🛠️ Detected potential tool call`);
 
                 try {
                     // CLEAN the JSON before parsing (Fixes the error you saw)
                     const jsonStr = cleanJson(content);
                     const toolCall = JSON.parse(jsonStr);
+
+                    // Validate the tool call structure
+                    if (!isValidToolCall(toolCall)) {
+                        console.warn("⚠️ Invalid tool call structure, treating as normal response");
+                        return content;
+                    }
+
                     let toolResult = "";
+                    console.log(`✅ Valid tool call: ${toolCall.tool}`);
 
-                    console.log("Tool Selected:", toolCall.tool);
+                    // C. Execute the appropriate tool
+                    switch (toolCall.tool) {
+                        case "search_trips":
+                            toolResult = await bookingTools.searchTrips(toolCall.args.query);
+                            break;
 
-                    // Execute Logic
-                    if (toolCall.tool === "search_trips") {
-                        toolResult = await bookingTools.searchTrips(toolCall.args.query);
-                    }
-                    else if (toolCall.tool === "get_booking_details") {
-                        toolResult = await bookingTools.getBookingDetails(toolCall.args.bookingId);
-                    }
-                    else if (toolCall.tool === "cancel_booking") {
-                        toolResult = await bookingTools.cancelTicket(toolCall.args.bookingId);
-                    }
-                    else if (toolCall.tool === "book_ticket") {
-                        toolResult = await bookingTools.bookTicket(
-                            toolCall.args.tripId,
-                            userId,
-                            toolCall.args.pickupId,
-                            toolCall.args.dropId,
-                            toolCall.args.amount
-                        );
-                    }
-                    // --- MCP TOOLS DELEGATION ---
-                    else if (mcpClient && mcpToolsOrchestration.some((t: any) => t.name === toolCall.tool)) {
-                        console.log(`📡 Calling MCP Tool: ${toolCall.tool}`);
-                        try {
-                            const mcpRes = await mcpClient.callTool({
-                                name: toolCall.tool,
-                                arguments: toolCall.args
-                            });
-                            toolResult = JSON.stringify(mcpRes);
-                        } catch (err: any) {
-                            toolResult = "Error calling MCP tool: " + err.message;
-                        }
+                        case "get_booking_details":
+                            const bookingId = parseInt(toolCall.args.bookingId);
+                            if (isNaN(bookingId)) {
+                                return "I need a valid booking ID number to check the status.";
+                            }
+                            toolResult = await bookingTools.getBookingDetails(bookingId);
+                            break;
+
+                        case "cancel_booking":
+                            const cancelId = parseInt(toolCall.args.bookingId);
+                            if (isNaN(cancelId)) {
+                                return "I need a valid booking ID number to cancel.";
+                            }
+                            toolResult = await bookingTools.cancelTicket(cancelId);
+                            break;
+
+                        case "book_ticket":
+                            toolResult = await bookingTools.bookTicket(
+                                toolCall.args.tripId,
+                                userId,
+                                toolCall.args.pickupId,
+                                toolCall.args.dropId,
+                                toolCall.args.amount
+                            );
+                            break;
+
+                        default:
+                            console.warn(`⚠️ Unknown tool: ${toolCall.tool}`);
+                            return "I couldn't understand which action to perform. Could you rephrase?";
                     }
 
-                    // C. Feed result back to AI
+                    console.log(`📊 Tool result: ${toolResult.substring(0, 100)}...`);
+
+                    // D. Feed result back to AI for natural response
                     const finalResponse = await hf.chatCompletion({
                         model: model,
                         messages: [
@@ -199,18 +225,24 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
 
                     return finalResponse.choices[0]?.message?.content;
 
-                } catch (e) {
-                    console.error("❌ Tool Processing Error:", e);
-                    // FALLBACK: Don't show JSON to user. Show a polite error.
-                    return "I attempted to process your request, but I encountered a technical issue. Please try again.";
+                } catch (parseError) {
+                    console.error("❌ JSON Parse Error:", parseError);
+                    // If JSON parsing fails, treat as normal response
+                    return content;
                 }
             }
 
+            // E. No tool call detected - return conversational response
             return content;
 
-        } catch (error) {
-            console.warn(`Retry ${model}...`);
+        } catch (error: any) {
+            console.warn(`⚠️ Model ${model} failed:`, error.message);
+            lastError = error;
+            continue; // Try next model
         }
     }
-    return "I am currently experiencing high traffic. Please try again later.";
+
+    // All models failed
+    console.error("❌ All models failed:", lastError);
+    return "I'm having trouble processing your request right now. Please try again in a moment.";
 };
