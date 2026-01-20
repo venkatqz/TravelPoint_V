@@ -3,3 +3,9 @@ node_modules
 .env
 
 /src/generated/prisma
+
+# Google Calendar MCP credentials
+credentials.json
+google-calendar-credentials.json
+mcp-google-calendar-token.json
+.google-calendar-token
