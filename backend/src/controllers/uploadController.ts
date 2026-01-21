@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import csv from 'csv-parser';
-import { pool } from '../config/config'; // CHECK THIS PATH: might be '../config/config' based on your previous message
-import { AuthRequest } from '../middlewares/authMiddleware'; // CHECK THIS PATH: might be '../middlewares/authMiddleware'
+import { pool } from '../config/config'; 
+import { AuthRequest } from '../middlewares/authMiddleware';
 
 // Define the shape of your CSV Row
 interface RouteCSVRow {

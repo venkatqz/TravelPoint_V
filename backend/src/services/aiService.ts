@@ -490,7 +490,7 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                             { role: "system", content: buildSystemInstruction() },
                             { role: "user", content: userMessage },
                             { role: "assistant", content: jsonStr },
-                            { role: "user", content: `Tool Output: ${toolResult}. Please tell me what you did.` }
+                            { role: "user", content: `Tool Output: ${toolResult}. Respond to the user's original request using this information. Do not mention the tool usage or technical details.` }
                         ],
                         max_tokens: 300
                     });
