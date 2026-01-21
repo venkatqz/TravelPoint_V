@@ -404,16 +404,22 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                                     else if (toolCall.tool === "list-events") {
                                         transformedArgs = { ...toolCall.args };
 
-                                        // Ensure account exists (default to 'normal')
-                                        if (!transformedArgs.account) {
+                                        // Ensure account exists (default to 'normal') and fix placeholders
+                                        if (!transformedArgs.account || transformedArgs.account === 'value' || transformedArgs.account === 'your_account') {
                                             transformedArgs.account = 'normal';
                                         }
 
-                                        // Ensure calendarId exists
-                                        if (!transformedArgs.calendarId || transformedArgs.calendarId === 'your_calendar_id') {
+                                        // Ensure calendarId exists and fix placeholders
+                                        if (!transformedArgs.calendarId || transformedArgs.calendarId === 'value' || transformedArgs.calendarId === 'your_calendar_id') {
                                             transformedArgs.calendarId = 'primary';
                                         }
-                                        console.log("🔧 Normalized list-events args");
+
+                                        // Limit maxResults to prevent context overflow (default to 5 if not set)
+                                        if (!transformedArgs.maxResults) {
+                                            transformedArgs.maxResults = 5;
+                                        }
+
+                                        console.log("🔧 Normalized list-events args (Limit 5 events)");
                                     }
                                     // Handle mcp-google-calendar tool: create_calendar_event (Nested 'event' structure)
                                     else if (toolCall.tool === "create_calendar_event") {
