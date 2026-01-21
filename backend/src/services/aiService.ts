@@ -201,17 +201,21 @@ CRITICAL RULES:
 3. When user wants to cancel/refund, use "cancel_booking" tool
 4. When user wants to book a ticket, use "book_ticket" tool
 5. When user wants calendar operations, use the appropriate Google Calendar tool
+6. ERROR HANDLING: If a tool fails (e.g. "account not found"), report the error to the user exactly. DO NOT invent new tools like "manage-accounts".
+7. ACCOUNT MANAGEMENT: You CANNOT create/add accounts in chat. Tell the user to run "npx @cocal/google-calendar-mcp auth" in their terminal.
 
 CALENDAR TOOL RULES (STRICT):
 - For "create-event", do NOT use a nested 'event' object. Place summary, description, start, and end directly in the top-level arguments alongside calendarId.
 - ALWAYS use 'primary' as the calendarId unless specified otherwise.
-- ALWAYS use 'normal' as the account nickname.
+- Use 'personal' as the default account nickname, but allow others (e.g. 'work', 'normal') if specified.
+
 - Start/End times MUST be plain strings (ISO format), NOT objects.
 
 To call a tool, reply with ONLY valid JSON in this EXACT format:
 {"tool": "tool_name", "args": {"paramName": value}}
 
 If the user is just chatting (hello, thanks, etc), reply normally without JSON.
+When listing events, only give concise response
 </instructions>
 `;
 
@@ -365,9 +369,10 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                                     if (toolCall.tool === "create-event") {
                                         transformedArgs = { ...toolCall.args };
 
-                                        // Ensure account exists (default to 'normal')
-                                        if (!transformedArgs.account) {
-                                            transformedArgs.account = 'normal';
+                                        // Ensure account exists. Default to 'personal' if missing or placeholder.
+                                        const placeholders = ['value', 'your_account', 'user', 'default', 'account', 'normal'];
+                                        if (!transformedArgs.account || placeholders.includes(transformedArgs.account)) {
+                                            transformedArgs.account = 'personal';
                                         }
 
                                         // Ensure calendarId exists
@@ -404,9 +409,10 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                                     else if (toolCall.tool === "list-events") {
                                         transformedArgs = { ...toolCall.args };
 
-                                        // Ensure account exists (default to 'normal') and fix placeholders
-                                        if (!transformedArgs.account || transformedArgs.account === 'value' || transformedArgs.account === 'your_account') {
-                                            transformedArgs.account = 'normal';
+                                        // Ensure account exists. Default to 'personal' if missing or placeholder.
+                                        const placeholders = ['value', 'your_account', 'user', 'default', 'account', 'normal'];
+                                        if (!transformedArgs.account || placeholders.includes(transformedArgs.account)) {
+                                            transformedArgs.account = 'personal';
                                         }
 
                                         // Ensure calendarId exists and fix placeholders
@@ -489,7 +495,9 @@ export const generateAIResponse = async (userMessage: string, userId: number = 1
                         max_tokens: 300
                     });
 
-                    return finalResponse.choices[0]?.message?.content;
+                    const finalContent = finalResponse.choices[0]?.message?.content;
+                    console.log(`🤖 Final AI Response: ${finalContent}`);
+                    return finalContent;
 
                 } catch (parseError) {
                     console.error("❌ JSON Parse Error:", parseError);
